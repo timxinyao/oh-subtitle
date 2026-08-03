@@ -106,6 +106,11 @@ public partial class MainWindow : Window
     private bool _isClickThrough;
 
     /// <summary>
+    /// 鼠标是否位于右侧常驻控制区；该区域用于在学习模式下保留退出入口。
+    /// </summary>
+    private bool _isControlAreaHovered;
+
+    /// <summary>
     /// 编辑模式下应恢复的遮罩透明度
     /// </summary>
     private double _normalOpacity = 1d;
@@ -356,8 +361,28 @@ public partial class MainWindow : Window
     {
         if (_isStudyMode)
         {
-            SetRevealState(IsCursorInsideWindow());
+            SetRevealState(IsCursorInsideWindow() && !_isControlAreaHovered);
         }
+    }
+
+    /// <summary>
+    /// 右侧常驻控制区进入：学习模式下保留按钮可操作。
+    /// </summary>
+    private void GridControls_MouseEnter(object sender, MouseEventArgs e)
+    {
+        _isControlAreaHovered = true;
+        if (_isStudyMode)
+        {
+            SetRevealState(false);
+        }
+    }
+
+    /// <summary>
+    /// 右侧常驻控制区离开：下一个轮询周期恢复正常揭示判断。
+    /// </summary>
+    private void GridControls_MouseLeave(object sender, MouseEventArgs e)
+    {
+        _isControlAreaHovered = false;
     }
 
     /// <summary>
@@ -375,11 +400,13 @@ public partial class MainWindow : Window
     {
         _isStudyMode = enabled;
         menuStudyMode.IsChecked = enabled;
+        gridStudyMode.ToolTip = enabled ? "关闭学习模式" : "开启学习模式";
+        _isControlAreaHovered = gridControls.IsMouseOver;
 
         if (enabled)
         {
             _studyModeTimer.Start();
-            SetRevealState(IsCursorInsideWindow());
+            SetRevealState(IsCursorInsideWindow() && !_isControlAreaHovered);
         }
         else
         {
@@ -547,7 +574,7 @@ public partial class MainWindow : Window
     {
         Background = txtInput.Background = background;
         txtInput.Foreground = foreground;
-        imgEye.Foreground = imgReset.Foreground = labReset.Foreground = imgWriteNote.Foreground = labWriteNote.Foreground = imgClose.Foreground = foreground;
+        imgEye.Foreground = imgStudyMode.Foreground = imgReset.Foreground = labReset.Foreground = imgWriteNote.Foreground = labWriteNote.Foreground = imgClose.Foreground = foreground;
     }
 
     /// <summary>
@@ -572,6 +599,18 @@ public partial class MainWindow : Window
     {
         _isExit = true;
         Application.Current.Shutdown();
+    }
+
+    /// <summary>
+    /// 右侧常驻按钮
+    /// 切换学习模式
+    /// </summary>
+    private void GridStudyMode_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            ToggleStudyMode();
+        }
     }
 
     /// <summary>
