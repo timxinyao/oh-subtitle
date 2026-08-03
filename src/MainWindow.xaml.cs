@@ -516,7 +516,9 @@ public partial class MainWindow : Window
         // 学习模式只隐藏笔记区域，根布局和右侧操作区始终保留。
         _gridMainHiddenTimer.Stop();
         gridNoteArea.Visibility = enabled ? Visibility.Hidden : Visibility.Visible;
-        ResizeMode = enabled ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
+        // NoResize 会让无边框透明窗口失去任务栏图标的默认最小化行为；
+        // CanMinimize 仍禁止调整大小，但保留任务栏最小化/恢复。
+        ResizeMode = enabled ? ResizeMode.CanMinimize : ResizeMode.CanResizeWithGrip;
         Cursor = enabled ? Cursors.None : Cursors.Arrow;
         gridControls.Cursor = Cursors.Arrow;
         gridEye.Cursor = Cursors.Hand;
