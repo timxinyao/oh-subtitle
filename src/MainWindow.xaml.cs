@@ -366,6 +366,7 @@ public partial class MainWindow : Window
     {
         if (_isStudyMode)
         {
+            _isControlAreaHovered = IsCursorInsideControlArea();
             SetRevealState(IsCursorInsideWindow() && !_isControlAreaHovered);
         }
     }
@@ -406,17 +407,18 @@ public partial class MainWindow : Window
         _isStudyMode = enabled;
         menuStudyMode.IsChecked = enabled;
         gridStudyMode.ToolTip = enabled ? "关闭学习模式" : "开启学习模式";
-        _isControlAreaHovered = gridControls.IsMouseOver;
+        _isControlAreaHovered = IsCursorInsideControlArea();
 
         // 学习模式只隐藏笔记区域，根布局和右侧操作区始终保留。
         _gridMainHiddenTimer.Stop();
         gridNoteArea.Visibility = enabled ? Visibility.Hidden : Visibility.Visible;
         ResizeMode = enabled ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
         Cursor = enabled ? Cursors.None : Cursors.Arrow;
-        imgClose.Cursor = enabled ? Cursors.None : Cursors.Hand;
-        gridEye.Cursor = enabled ? Cursors.None : Cursors.Hand;
-        gridStudyMode.Cursor = enabled ? Cursors.None : Cursors.Hand;
-        gridMinimize.Cursor = enabled ? Cursors.None : Cursors.Hand;
+        gridControls.Cursor = Cursors.Arrow;
+        imgClose.Cursor = Cursors.Hand;
+        gridEye.Cursor = Cursors.Hand;
+        gridStudyMode.Cursor = Cursors.Hand;
+        gridMinimize.Cursor = Cursors.Hand;
 
         if (enabled)
         {
@@ -515,6 +517,33 @@ public partial class MainWindow : Window
             && cursor.X < windowRect.Right
             && cursor.Y >= windowRect.Top
             && cursor.Y < windowRect.Bottom;
+    }
+
+    /// <summary>
+    /// 使用 Win32 屏幕像素坐标检测右侧常驻控制区。
+    /// 控制区宽高来自 WPF 逻辑单位，并按当前 DPI 换算为屏幕像素。
+    /// </summary>
+    private bool IsCursorInsideControlArea()
+    {
+        if (_windowHandle == IntPtr.Zero
+            || !GetCursorPos(out var cursor)
+            || !GetWindowRect(_windowHandle, out var windowRect))
+        {
+            return false;
+        }
+
+        var compositionTarget = PresentationSource.FromVisual(this)?.CompositionTarget;
+        double scaleX = compositionTarget?.TransformToDevice.M11 ?? 1d;
+        double scaleY = compositionTarget?.TransformToDevice.M22 ?? 1d;
+        int controlWidth = Math.Max(1, (int)Math.Round(gridControls.ActualWidth * scaleX));
+        int controlHeight = Math.Max(1, (int)Math.Round(gridControls.ActualHeight * scaleY));
+        int controlLeft = windowRect.Right - controlWidth;
+        int controlTop = windowRect.Top;
+
+        return cursor.X >= controlLeft
+            && cursor.X < windowRect.Right
+            && cursor.Y >= controlTop
+            && cursor.Y < controlTop + controlHeight;
     }
 
     private void SetWindowOpacity(double opacity)
@@ -644,6 +673,11 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
         {
+            if (_isStudyMode)
+            {
+                SetRevealState(false);
+            }
+
             WindowState = WindowState.Minimized;
         }
     }
