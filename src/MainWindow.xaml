@@ -10,6 +10,7 @@
         MouseLeave="Window_MouseLeave"
         MouseDown="Window_MouseDown"
         Loaded="Window_Loaded"
+        StateChanged="Window_StateChanged"
         Closing="Window_Closing">
     <!-- Body Start -->
     <Grid x:Name="gridMain">
@@ -73,8 +74,10 @@
                 <RowDefinition Height="20"/>
                 <RowDefinition Height="1*"/>
             </Grid.RowDefinitions>
-            <fa:ImageAwesome x:Name="imgClose" Grid.Row="0" Icon="WindowClose" Margin="0,2,2,0" Width="14" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="FloralWhite"
-                             MouseDown="ImgClose_MouseDown" Cursor="Hand"/>
+            <Grid x:Name="gridMinimize" Grid.Row="0" Background="Transparent" Height="20" Cursor="Hand"
+                  ToolTip="最小化" MouseDown="GridMinimize_MouseDown">
+                <fa:ImageAwesome x:Name="imgMinimize" Icon="WindowMinimize" Margin="0,2,2,0" Width="14" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="FloralWhite"/>
+            </Grid>
             <Grid x:Name="gridEye" Grid.Row="1" Background="Transparent" Height="20" Cursor="Hand"
                   MouseEnter="GridEye_MouseEnter" MouseLeave="GridEye_MouseLeave">
                 <fa:ImageAwesome x:Name="imgEye" Icon="Eye" Margin="0,0,2,0" Width="14" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="FloralWhite"/>
@@ -82,10 +85,6 @@
             <Grid x:Name="gridStudyMode" Grid.Row="2" Background="Transparent" Height="20" Cursor="Hand"
                   ToolTip="开启学习模式" MouseDown="GridStudyMode_MouseDown">
                 <fa:ImageAwesome x:Name="imgStudyMode" Icon="GraduationCap" Margin="0,0,2,0" Width="14" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="FloralWhite"/>
-            </Grid>
-            <Grid x:Name="gridMinimize" Grid.Row="3" Background="Transparent" Height="20" Cursor="Hand"
-                  ToolTip="最小化" MouseDown="GridMinimize_MouseDown">
-                <fa:ImageAwesome x:Name="imgMinimize" Icon="WindowMinimize" Margin="0,0,2,0" Width="14" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="FloralWhite"/>
             </Grid>
         </Grid>
     </Grid>

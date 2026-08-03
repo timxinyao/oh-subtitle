@@ -134,6 +134,11 @@ public partial class MainWindow : Window
     private bool _isExit = false;
 
     /// <summary>
+    /// 窗口是否已最小化；最小化时暂停置顶刷新，避免任务栏无法再次控制窗口。
+    /// </summary>
+    private bool _isWindowMinimized;
+
+    /// <summary>
     /// 笔记服务，用于记笔记
     /// </summary>
     private INoteService _noteService;
@@ -261,13 +266,48 @@ public partial class MainWindow : Window
                 {
                     break;
                 }
+
+                if (_isWindowMinimized)
+                {
+                    continue;
+                }
+
                 Application.Current?.Dispatcher.Invoke(() =>
                 {
-                    SetWindowPos(windowHandle, _hwndTopMost, 0, 0, 0, 0, 0x0003);
+                    if (!_isExit && !_isWindowMinimized)
+                    {
+                        SetWindowPos(
+                            windowHandle,
+                            _hwndTopMost,
+                            0,
+                            0,
+                            0,
+                            0,
+                            SwpNoMove | SwpNoSize | SwpNoActivate);
+                    }
                 });
             }
         });
         _setTopMostThread.Start();
+    }
+
+    /// <summary>
+    /// 最小化时暂停会影响任务栏操作的窗口刷新；恢复后重新启动学习模式检测。
+    /// </summary>
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        _isWindowMinimized = WindowState == WindowState.Minimized;
+        if (_isWindowMinimized)
+        {
+            _gridMainHiddenTimer.Stop();
+            _studyModeTimer.Stop();
+            SetRevealState(false);
+        }
+        else if (_isStudyMode && !_isExit)
+        {
+            _isControlAreaHovered = IsCursorInsideControlArea();
+            _studyModeTimer.Start();
+        }
     }
 
     /// <summary>
@@ -419,7 +459,6 @@ public partial class MainWindow : Window
         ResizeMode = enabled ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
         Cursor = enabled ? Cursors.None : Cursors.Arrow;
         gridControls.Cursor = Cursors.Arrow;
-        imgClose.Cursor = Cursors.Hand;
         gridEye.Cursor = Cursors.Hand;
         gridStudyMode.Cursor = Cursors.Hand;
         gridMinimize.Cursor = Cursors.Hand;
@@ -632,7 +671,7 @@ public partial class MainWindow : Window
 
         txtInput.Background = background;
         txtInput.Foreground = foreground;
-        imgEye.Foreground = imgStudyMode.Foreground = imgReset.Foreground = labReset.Foreground = imgWriteNote.Foreground = labWriteNote.Foreground = imgClose.Foreground = foreground;
+        imgEye.Foreground = imgStudyMode.Foreground = imgReset.Foreground = labReset.Foreground = imgWriteNote.Foreground = labWriteNote.Foreground = imgMinimize.Foreground = foreground;
     }
 
     /// <summary>
@@ -645,18 +684,6 @@ public partial class MainWindow : Window
     {
         txtInput.Text = string.Empty;
         gridReset.Visibility = Visibility.Hidden;
-    }
-
-    /// <summary>
-    /// 关闭按钮
-    /// 鼠标单击
-    /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
-    private void ImgClose_MouseDown(object sender, MouseButtonEventArgs e)
-    {
-        _isExit = true;
-        Application.Current.Shutdown();
     }
 
     /// <summary>
