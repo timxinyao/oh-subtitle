@@ -5,7 +5,7 @@
         Title="OhSubtitle" Width="860" Height="65"
         Topmost="True" WindowStyle="None" Background="Black"
         AllowsTransparency="True" ResizeMode="CanResizeWithGrip"
-        ShowInTaskbar="False"
+        ShowInTaskbar="True"
         MouseEnter="Window_MouseEnter"
         MouseLeave="Window_MouseLeave"
         MouseDown="Window_MouseDown"
@@ -19,7 +19,7 @@
             <ColumnDefinition Width="20"/>
         </Grid.ColumnDefinitions>
         <!-- Grid Column 1 -->
-        <Grid Grid.Column="1">
+        <Grid x:Name="gridNoteArea" Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="1*"/>
                 <RowDefinition Height="20"/>
@@ -70,6 +70,7 @@
                 <RowDefinition Height="20"/>
                 <RowDefinition Height="20"/>
                 <RowDefinition Height="20"/>
+                <RowDefinition Height="20"/>
                 <RowDefinition Height="1*"/>
             </Grid.RowDefinitions>
             <fa:ImageAwesome x:Name="imgClose" Grid.Row="0" Icon="WindowClose" Margin="0,2,2,0" Width="14" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="FloralWhite"
@@ -81,6 +82,10 @@
             <Grid x:Name="gridStudyMode" Grid.Row="2" Background="Transparent" Height="20" Cursor="Hand"
                   ToolTip="开启学习模式" MouseDown="GridStudyMode_MouseDown">
                 <fa:ImageAwesome x:Name="imgStudyMode" Icon="GraduationCap" Margin="0,0,2,0" Width="14" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="FloralWhite"/>
+            </Grid>
+            <Grid x:Name="gridMinimize" Grid.Row="3" Background="Transparent" Height="20" Cursor="Hand"
+                  ToolTip="最小化" MouseDown="GridMinimize_MouseDown">
+                <fa:ImageAwesome x:Name="imgMinimize" Icon="WindowMinimize" Margin="0,0,2,0" Width="14" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="FloralWhite"/>
             </Grid>
         </Grid>
     </Grid>

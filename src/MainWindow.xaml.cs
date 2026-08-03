@@ -124,7 +124,7 @@ public partial class MainWindow : Window
     private Thread? _setTopMostThread;
 
     /// <summary>    
-    /// 倒计时结束时将 <see cref="gridMain"/> 设为隐藏
+    /// 倒计时结束时将笔记区域设为隐藏
     /// </summary>
     private readonly DispatcherTimer _gridMainHiddenTimer;
 
@@ -142,6 +142,11 @@ public partial class MainWindow : Window
     /// 主题颜色
     /// </summary>
     private ThemeColors _themeColor;
+
+    /// <summary>
+    /// 当前主题对应的窗口背景色，揭示状态下暂时切换为透明。
+    /// </summary>
+    private Brush _normalBackground = Brushes.Black;
 
     /// <summary>
     /// 主题颜色
@@ -196,10 +201,10 @@ public partial class MainWindow : Window
         };
         _gridMainHiddenTimer.Tick += new EventHandler((_, _) =>
         {
-            if (!_isExit && gridMain != null)
+            if (!_isExit && !_isStudyMode && gridNoteArea != null)
             {
-                // 隐藏输入框与按钮
-                gridMain.Visibility = Visibility.Hidden;
+                // 隐藏输入框与笔记按钮，右侧控制区始终保留。
+                gridNoteArea.Visibility = Visibility.Hidden;
                 // 隐藏右下角三角标
                 ResizeMode = ResizeMode.NoResize;
             }
@@ -276,8 +281,8 @@ public partial class MainWindow : Window
         }
 
         _gridMainHiddenTimer.Stop();
-        // 显示输入框与按钮
-        gridMain.Visibility = Visibility.Visible;
+        // 显示输入框与笔记按钮
+        gridNoteArea.Visibility = Visibility.Visible;
         // 显示右下角三角标
         ResizeMode = ResizeMode.CanResizeWithGrip;
     }
@@ -403,12 +408,15 @@ public partial class MainWindow : Window
         gridStudyMode.ToolTip = enabled ? "关闭学习模式" : "开启学习模式";
         _isControlAreaHovered = gridControls.IsMouseOver;
 
-        // 学习模式只保留右侧操作区，隐藏笔记输入区和提示文字，并隐藏遮罩窗口上的光标。
-        gridMain.Visibility = enabled ? Visibility.Hidden : Visibility.Visible;
+        // 学习模式只隐藏笔记区域，根布局和右侧操作区始终保留。
+        _gridMainHiddenTimer.Stop();
+        gridNoteArea.Visibility = enabled ? Visibility.Hidden : Visibility.Visible;
+        ResizeMode = enabled ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
         Cursor = enabled ? Cursors.None : Cursors.Arrow;
         imgClose.Cursor = enabled ? Cursors.None : Cursors.Hand;
         gridEye.Cursor = enabled ? Cursors.None : Cursors.Hand;
         gridStudyMode.Cursor = enabled ? Cursors.None : Cursors.Hand;
+        gridMinimize.Cursor = enabled ? Cursors.None : Cursors.Hand;
 
         if (enabled)
         {
@@ -440,12 +448,15 @@ public partial class MainWindow : Window
         _isRevealed = revealed;
         if (revealed)
         {
-            SetWindowOpacity(0d);
+            // 只让窗口背景透明，不能把右侧操作区随整个 Window 一起设为透明。
+            Background = Brushes.Transparent;
+            SetWindowOpacity(1d);
             SetClickThrough(true);
         }
         else
         {
             SetClickThrough(false);
+            Background = _normalBackground;
             SetWindowOpacity(_normalOpacity);
         }
     }
@@ -579,7 +590,13 @@ public partial class MainWindow : Window
     /// <param name="foreground"></param>
     private void SetWindowColor(Brush background, Brush foreground)
     {
-        Background = txtInput.Background = background;
+        _normalBackground = background;
+        if (!_isRevealed)
+        {
+            Background = background;
+        }
+
+        txtInput.Background = background;
         txtInput.Foreground = foreground;
         imgEye.Foreground = imgStudyMode.Foreground = imgReset.Foreground = labReset.Foreground = imgWriteNote.Foreground = labWriteNote.Foreground = imgClose.Foreground = foreground;
     }
@@ -617,6 +634,17 @@ public partial class MainWindow : Window
         if (e.ChangedButton == MouseButton.Left)
         {
             ToggleStudyMode();
+        }
+    }
+
+    /// <summary>
+    /// 最小化按钮。
+    /// </summary>
+    private void GridMinimize_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            WindowState = WindowState.Minimized;
         }
     }
 
