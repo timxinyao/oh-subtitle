@@ -247,6 +247,9 @@ public partial class MainWindow : Window
                 : "Ctrl+Shift+Q 快捷键已被其他程序占用";
         }
 
+        // 恢复上次关闭时的编辑/学习模式；新安装的默认值为编辑模式。
+        SetStudyMode(Properties.Settings.Default.StudyMode);
+
         // 创建一个新线程，每过 800ms 就重新将该窗体设为置顶（与视频播放器争夺 TopMost）
         var windowHandle = _windowHandle;
         _setTopMostThread = new Thread(() =>
@@ -339,6 +342,9 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        // 先保存当前模式，再恢复编辑状态并清理窗口资源。
+        SaveCurrentSettings();
+
         _gridMainHiddenTimer.Stop();
         _studyModeTimer.Stop();
         SetStudyMode(false);
@@ -352,8 +358,6 @@ public partial class MainWindow : Window
 
         gridWriteNote.Visibility = Visibility.Hidden;
         gridReset.Visibility = Visibility.Hidden;
-
-        SaveCurrentSettings();
 
         _isExit = true;
     }
@@ -609,6 +613,7 @@ public partial class MainWindow : Window
         // 保存当前位置、大小和状态到配置文件
         Properties.Settings.Default.MainWindowsRect = RestoreBounds;
         Properties.Settings.Default.ThemeColor = ThemeColor;
+        Properties.Settings.Default.StudyMode = _isStudyMode;
         Properties.Settings.Default.Save();
     }
 

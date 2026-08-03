@@ -46,5 +46,17 @@ namespace OhSubtitle.Properties {
                 this["ThemeColor"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public global::System.Boolean StudyMode {
+            get {
+                return ((global::System.Boolean)(this["StudyMode"]));
+            }
+            set {
+                this["StudyMode"] = value;
+            }
+        }
     }
 }

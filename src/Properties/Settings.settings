@@ -8,5 +8,8 @@
     <Setting Name="ThemeColor" Type="OhSubtitle.Enums.ThemeColors" Scope="User">
       <Value Profile="(Default)">0</Value>
     </Setting>
+    <Setting Name="StudyMode" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
