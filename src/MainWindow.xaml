@@ -76,7 +76,7 @@
             </Grid.RowDefinitions>
             <Grid x:Name="gridMinimize" Grid.Row="0" Background="Transparent" Height="20" Cursor="Hand"
                   ToolTip="最小化" MouseDown="GridMinimize_MouseDown">
-                <fa:ImageAwesome x:Name="imgMinimize" Icon="WindowMinimize" Margin="0,2,2,0" Width="14" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="FloralWhite"/>
+                <fa:ImageAwesome x:Name="imgMinimize" Icon="WindowMinimize" Margin="0,5,2,0" Width="14" VerticalAlignment="Top" HorizontalAlignment="Right" Foreground="FloralWhite"/>
             </Grid>
             <Grid x:Name="gridEye" Grid.Row="1" Background="Transparent" Height="20" Cursor="Hand"
                   MouseEnter="GridEye_MouseEnter" MouseLeave="GridEye_MouseLeave">
