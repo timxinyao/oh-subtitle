@@ -37,6 +37,13 @@ public partial class MainWindow : Window
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
+    private const int WmSize = 0x0005;
+    private const int WmSysCommand = 0x0112;
+    private const long ScMinimize = 0xF020L;
+    private const long SystemCommandMask = 0xFFF0L;
+    private const int SizeMinimized = 1;
+    private const int SizeRestored = 0;
+    private const int SizeMaximized = 2;
 
     [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -84,6 +91,11 @@ public partial class MainWindow : Window
     /// 窗体句柄
     /// </summary>
     private IntPtr _windowHandle;
+
+    /// <summary>
+    /// 用于接收任务栏等系统窗口消息的底层窗口源。
+    /// </summary>
+    private HwndSource? _windowSource;
 
     /// <summary>
     /// 学习模式下检测鼠标屏幕坐标的定时器
@@ -240,6 +252,8 @@ public partial class MainWindow : Window
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         _windowHandle = new WindowInteropHelper(this).Handle;
+        _windowSource = HwndSource.FromHwnd(_windowHandle);
+        _windowSource?.AddHook(WindowProc);
         _normalOpacity = Opacity;
 
         // 注册系统快捷键
@@ -296,8 +310,51 @@ public partial class MainWindow : Window
     /// </summary>
     private void Window_StateChanged(object? sender, EventArgs e)
     {
-        _isWindowMinimized = WindowState == WindowState.Minimized;
-        if (_isWindowMinimized)
+        SetMinimizedState(WindowState == WindowState.Minimized);
+    }
+
+    /// <summary>
+    /// 处理任务栏触发的原生最小化消息。
+    /// 学习模式开启鼠标穿透后，WPF 自身的鼠标事件不再可靠，
+    /// 但任务栏发给窗口的 WM_SYSCOMMAND/WM_SIZE 仍然可以在这里捕获。
+    /// </summary>
+    private IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        switch (msg)
+        {
+            case WmSysCommand when (wParam.ToInt64() & SystemCommandMask) == ScMinimize:
+                SetMinimizedState(true);
+                break;
+
+            case WmSize:
+                var sizeState = wParam.ToInt64() & 0xFFFF;
+                if (sizeState == SizeMinimized)
+                {
+                    SetMinimizedState(true);
+                }
+                else if (sizeState == SizeRestored || sizeState == SizeMaximized)
+                {
+                    SetMinimizedState(false);
+                }
+                break;
+        }
+
+        // 不拦截系统消息，让 Windows 继续执行默认的最小化/恢复行为。
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// 集中处理最小化状态，避免学习模式下的穿透和定时器阻止任务栏操作。
+    /// </summary>
+    private void SetMinimizedState(bool minimized)
+    {
+        if (_isWindowMinimized == minimized)
+        {
+            return;
+        }
+
+        _isWindowMinimized = minimized;
+        if (minimized)
         {
             _gridMainHiddenTimer.Stop();
             _studyModeTimer.Stop();
@@ -395,6 +452,9 @@ public partial class MainWindow : Window
             HotKeyHelper.UnRegist(_windowHandle, _switchStudyModeHotKey);
             SetClickThrough(false);
         }
+
+        _windowSource?.RemoveHook(WindowProc);
+        _windowSource = null;
 
         gridWriteNote.Visibility = Visibility.Hidden;
         gridReset.Visibility = Visibility.Hidden;
