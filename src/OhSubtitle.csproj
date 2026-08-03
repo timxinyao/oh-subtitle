@@ -22,6 +22,11 @@
 		<DebugType>embedded</DebugType>
 	</PropertyGroup>
 
+	<!-- 普通构建用于编译检查，不生成会被启动器搜索到的 apphost；自包含 exe 只由 publish 生成。 -->
+	<PropertyGroup Condition="'$(RuntimeIdentifier)' == ''">
+		<UseAppHost>false</UseAppHost>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<PackageReference Include="FontAwesome.WPF" Version="4.7.0.9" />
 		<PackageReference Include="Microsoft.Windows.Compatibility" Version="6.0.0" />
@@ -41,4 +46,10 @@
 			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
 		</None>
 	</ItemGroup>
+
+	<!-- publish 会先在 RuntimeIdentifier 输出目录生成中间 apphost，发布完成后只保留 publish 目录中的最终 exe。 -->
+	<Target Name="RemoveIntermediateAppHostAfterPublish" AfterTargets="Publish">
+		<Delete Files="$(OutputPath)$(AssemblyName).exe"
+				Condition="'$(RuntimeIdentifier)' != '' and '$(OutputPath)$(AssemblyName).exe' != '$(PublishDir)$(AssemblyName).exe'" />
+	</Target>
 </Project>

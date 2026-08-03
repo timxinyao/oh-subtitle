@@ -403,6 +403,13 @@ public partial class MainWindow : Window
         gridStudyMode.ToolTip = enabled ? "关闭学习模式" : "开启学习模式";
         _isControlAreaHovered = gridControls.IsMouseOver;
 
+        // 学习模式只保留右侧操作区，隐藏笔记输入区和提示文字，并隐藏遮罩窗口上的光标。
+        gridMain.Visibility = enabled ? Visibility.Hidden : Visibility.Visible;
+        Cursor = enabled ? Cursors.None : Cursors.Arrow;
+        imgClose.Cursor = enabled ? Cursors.None : Cursors.Hand;
+        gridEye.Cursor = enabled ? Cursors.None : Cursors.Hand;
+        gridStudyMode.Cursor = enabled ? Cursors.None : Cursors.Hand;
+
         if (enabled)
         {
             _studyModeTimer.Start();
