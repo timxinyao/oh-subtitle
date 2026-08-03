@@ -23,7 +23,10 @@ public static class HotKeyHelper
 
     private static int _keyId = 10;
 
-    private static Dictionary<int, HotKeyCallBackHanlder> _keyMap = new Dictionary<int, HotKeyCallBackHanlder>();
+    private static readonly Dictionary<int, HotKeyRegistration> _keyMap = new();
+    private static readonly Dictionary<IntPtr, HwndSource> _hookedWindows = new();
+
+    private sealed record HotKeyRegistration(IntPtr Hwnd, HotKeyCallBackHanlder Callback);
 
     public delegate void HotKeyCallBackHanlder();
 
@@ -36,17 +39,35 @@ public static class HotKeyHelper
     /// <param name="callBack">回调函数</param>
     public static bool TryRegist(IntPtr hwnd, HotKeyModifiers fsModifiers, Key key, HotKeyCallBackHanlder callBack)
     {
-        var _hwndSource = HwndSource.FromHwnd(hwnd);
-        _hwndSource.AddHook(WndProc);
+        var hwndSource = HwndSource.FromHwnd(hwnd);
+        if (hwndSource is null)
+        {
+            return false;
+        }
+
+        var hookAdded = false;
+        if (!_hookedWindows.ContainsKey(hwnd))
+        {
+            hwndSource.AddHook(WndProc);
+            _hookedWindows[hwnd] = hwndSource;
+            hookAdded = true;
+        }
 
         int id = _keyId++;
 
         var vk = KeyInterop.VirtualKeyFromKey(key);
         if (RegisterHotKey(hwnd, id, fsModifiers, (uint)vk))
         {
-            _keyMap[id] = callBack;
+            _keyMap[id] = new HotKeyRegistration(hwnd, callBack);
             return true;
         }
+
+        if (hookAdded)
+        {
+            hwndSource.RemoveHook(WndProc);
+            _hookedWindows.Remove(hwnd);
+        }
+
         return false;
     }
 
@@ -58,9 +79,9 @@ public static class HotKeyHelper
         if (msg == WmHotKey)
         {
             int id = wParam.ToInt32();
-            if (_keyMap.TryGetValue(id, out var callback))
+            if (_keyMap.TryGetValue(id, out var registration))
             {
-                callback();
+                registration.Callback();
             }
         }
         return IntPtr.Zero;
@@ -73,12 +94,20 @@ public static class HotKeyHelper
     /// <param name="callBack">回调函数</param> 
     public static void UnRegist(IntPtr hwnd, HotKeyCallBackHanlder callBack)
     {
-        foreach (KeyValuePair<int, HotKeyCallBackHanlder> var in _keyMap)
+        var registrations = _keyMap
+            .Where(item => item.Value.Hwnd == hwnd && item.Value.Callback == callBack)
+            .ToList();
+
+        foreach (var registration in registrations)
         {
-            if (var.Value == callBack)
-            {
-                UnregisterHotKey(hwnd, var.Key);
-            }
+            UnregisterHotKey(hwnd, registration.Key);
+            _keyMap.Remove(registration.Key);
+        }
+
+        if (!_keyMap.Values.Any(item => item.Hwnd == hwnd)
+            && _hookedWindows.Remove(hwnd, out var hwndSource))
+        {
+            hwndSource.RemoveHook(WndProc);
         }
     }
 }

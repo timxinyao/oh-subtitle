@@ -80,6 +80,8 @@
             <MenuItem Name="menuThemeColorDimGray" Header="暗灰" IsCheckable="True" Click="MenuThemeColorDimGray_Click"></MenuItem>
             <MenuItem Name="menuThemeColorBlack" Header="暗黑" IsCheckable="True" Click="MenuThemeColorBlack_Click" IsChecked="True"></MenuItem>
             <Separator />
+            <MenuItem Name="menuStudyMode" Header="学习模式" IsCheckable="True" Click="MenuStudyMode_Click"></MenuItem>
+            <Separator />
             <MenuItem Name="menuExit" Header="退出" Click="MenuExit_Click"></MenuItem>
         </ContextMenu>
     </Window.ContextMenu>

@@ -30,10 +30,88 @@ public partial class MainWindow : Window
     /// </summary>
     const double WINDOW_DEFAULT_HEIGHT = 65;
 
-    [DllImport("user32.dll")]
-    private static extern int SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, int uFlags);
+    private const int GwlExStyle = -20;
+    private const long WsExTransparent = 0x00000020L;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpFrameChanged = 0x0020;
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr32(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr32(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 
     private static readonly IntPtr _hwndTopMost = new(-1);
+
+    /// <summary>
+    /// 窗体句柄
+    /// </summary>
+    private IntPtr _windowHandle;
+
+    /// <summary>
+    /// 学习模式下检测鼠标屏幕坐标的定时器
+    /// </summary>
+    private readonly DispatcherTimer _studyModeTimer;
+
+    /// <summary>
+    /// 当前是否处于学习模式
+    /// </summary>
+    private bool _isStudyMode;
+
+    /// <summary>
+    /// 当前遮罩是否因鼠标位于窗口内而揭示
+    /// </summary>
+    private bool _isRevealed;
+
+    /// <summary>
+    /// 当前窗口是否开启了 Win32 鼠标穿透
+    /// </summary>
+    private bool _isClickThrough;
+
+    /// <summary>
+    /// 编辑模式下应恢复的遮罩透明度
+    /// </summary>
+    private double _normalOpacity = 1d;
+
+    private readonly HotKeyHelper.HotKeyCallBackHanlder _switchOpacityHotKey;
+    private readonly HotKeyHelper.HotKeyCallBackHanlder _switchStudyModeHotKey;
 
     /// <summary>
     /// 该线程负责周期性地将窗体设为置顶（与视频播放器争夺 TopMost）
@@ -104,6 +182,9 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        _switchOpacityHotKey = ToggleOpacity;
+        _switchStudyModeHotKey = ToggleStudyMode;
+
         _gridMainHiddenTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(3)
@@ -119,11 +200,17 @@ public partial class MainWindow : Window
             }
         });
 
+        _studyModeTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(50)
+        };
+        _studyModeTimer.Tick += StudyModeTimer_Tick;
+
         InitializeComponent();
 
         LoadSettingsAndInitializeServices();
 
-        txtInput.Text = "可在此处输入笔记 / 按 Ctrl+Q 快捷键切换不透明度 / 右击悬浮窗边缘可打开菜单";
+        txtInput.Text = "可在此处输入笔记 / 按 Ctrl+Q 切换不透明度 / 按 Ctrl+Shift+Q 切换学习模式 / 右击悬浮窗边缘可打开菜单";
         gridNoteWrote.Visibility = Visibility.Hidden;
         gridWriteNote.Visibility = Visibility.Hidden;
         gridReset.Visibility = Visibility.Hidden;
@@ -137,26 +224,21 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        var windowHandle = new WindowInteropHelper(this).Handle;
+        _windowHandle = new WindowInteropHelper(this).Handle;
+        _normalOpacity = Opacity;
 
         // 注册系统快捷键
-        var hotKeyRegistSuccess = HotKeyHelper.TryRegist(windowHandle, HotKeyModifiers.Ctrl, Key.Q, () =>
+        var opacityHotKeyRegistSuccess = HotKeyHelper.TryRegist(_windowHandle, HotKeyModifiers.Ctrl, Key.Q, _switchOpacityHotKey);
+        var studyModeHotKeyRegistSuccess = HotKeyHelper.TryRegist(_windowHandle, HotKeyModifiers.Ctrl | HotKeyModifiers.Shift, Key.Q, _switchStudyModeHotKey);
+        if (!opacityHotKeyRegistSuccess || !studyModeHotKeyRegistSuccess)
         {
-            if (Opacity == 1)
-            {
-                Opacity = WINDOW_MINIUMU_OPACITY;
-            }
-            else
-            {
-                Opacity = 1;
-            }
-        });
-        if (!hotKeyRegistSuccess)
-        {
-            txtInput.Text = "Ctrl+Q 快捷键已被其他程序占用";
+            txtInput.Text = !opacityHotKeyRegistSuccess
+                ? "Ctrl+Q 快捷键已被其他程序占用"
+                : "Ctrl+Shift+Q 快捷键已被其他程序占用";
         }
 
         // 创建一个新线程，每过 800ms 就重新将该窗体设为置顶（与视频播放器争夺 TopMost）
+        var windowHandle = _windowHandle;
         _setTopMostThread = new Thread(() =>
         {
             while (true)
@@ -183,6 +265,11 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void Window_MouseEnter(object sender, MouseEventArgs e)
     {
+        if (_isStudyMode)
+        {
+            return;
+        }
+
         _gridMainHiddenTimer.Stop();
         // 显示输入框与按钮
         gridMain.Visibility = Visibility.Visible;
@@ -198,6 +285,11 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void Window_MouseLeave(object sender, MouseEventArgs e)
     {
+        if (_isStudyMode)
+        {
+            return;
+        }
+
         if (gridReset.Visibility == Visibility.Hidden)
         {
             _gridMainHiddenTimer.Start();
@@ -212,6 +304,11 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void Window_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_isStudyMode)
+        {
+            return;
+        }
+
         if (e.ChangedButton == MouseButton.Left && Mouse.LeftButton == MouseButtonState.Pressed)
         {
             ResizeMode = ResizeMode.NoResize; // 防止窗口拖到屏幕边缘自动最大化
@@ -232,12 +329,175 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        _gridMainHiddenTimer.Stop();
+        _studyModeTimer.Stop();
+        SetStudyMode(false);
+
+        if (_windowHandle != IntPtr.Zero)
+        {
+            HotKeyHelper.UnRegist(_windowHandle, _switchOpacityHotKey);
+            HotKeyHelper.UnRegist(_windowHandle, _switchStudyModeHotKey);
+            SetClickThrough(false);
+        }
+
         gridWriteNote.Visibility = Visibility.Hidden;
         gridReset.Visibility = Visibility.Hidden;
 
         SaveCurrentSettings();
 
         _isExit = true;
+    }
+
+    /// <summary>
+    /// 学习模式定时检测鼠标是否位于遮罩窗口范围内。
+    /// GetCursorPos 与 GetWindowRect 都使用屏幕像素坐标，避免与 WPF 逻辑坐标混用。
+    /// </summary>
+    private void StudyModeTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_isStudyMode)
+        {
+            SetRevealState(IsCursorInsideWindow());
+        }
+    }
+
+    /// <summary>
+    /// 切换学习模式。
+    /// </summary>
+    private void ToggleStudyMode()
+    {
+        SetStudyMode(!_isStudyMode);
+    }
+
+    /// <summary>
+    /// 设置学习模式，并在离开学习模式时立即恢复可操作状态。
+    /// </summary>
+    private void SetStudyMode(bool enabled)
+    {
+        _isStudyMode = enabled;
+        menuStudyMode.IsChecked = enabled;
+
+        if (enabled)
+        {
+            _studyModeTimer.Start();
+            SetRevealState(IsCursorInsideWindow());
+        }
+        else
+        {
+            _studyModeTimer.Stop();
+            SetRevealState(false);
+        }
+    }
+
+    /// <summary>
+    /// 根据鼠标是否在窗口矩形内切换揭示状态。
+    /// </summary>
+    private void SetRevealState(bool revealed)
+    {
+        if (revealed && !_isStudyMode)
+        {
+            revealed = false;
+        }
+
+        if (_isRevealed == revealed && _isClickThrough == revealed)
+        {
+            return;
+        }
+
+        _isRevealed = revealed;
+        if (revealed)
+        {
+            SetWindowOpacity(0d);
+            SetClickThrough(true);
+        }
+        else
+        {
+            SetClickThrough(false);
+            SetWindowOpacity(_normalOpacity);
+        }
+    }
+
+    /// <summary>
+    /// 只增删 WS_EX_TRANSPARENT，保留窗口现有的其他扩展样式。
+    /// </summary>
+    private void SetClickThrough(bool enabled)
+    {
+        if (_isClickThrough == enabled || _windowHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        long currentStyle = GetWindowLongPtrCompat(_windowHandle, GwlExStyle).ToInt64();
+        long updatedStyle = enabled
+            ? currentStyle | WsExTransparent
+            : currentStyle & ~WsExTransparent;
+
+        if (currentStyle != updatedStyle)
+        {
+            SetWindowLongPtrCompat(_windowHandle, GwlExStyle, new IntPtr(updatedStyle));
+            SetWindowPos(
+                _windowHandle,
+                IntPtr.Zero,
+                0,
+                0,
+                0,
+                0,
+                SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+        }
+
+        _isClickThrough = enabled;
+    }
+
+    private static IntPtr GetWindowLongPtrCompat(IntPtr hWnd, int nIndex)
+    {
+        return IntPtr.Size == 8
+            ? GetWindowLongPtr64(hWnd, nIndex)
+            : GetWindowLongPtr32(hWnd, nIndex);
+    }
+
+    private static IntPtr SetWindowLongPtrCompat(IntPtr hWnd, int nIndex, IntPtr newValue)
+    {
+        return IntPtr.Size == 8
+            ? SetWindowLongPtr64(hWnd, nIndex, newValue)
+            : SetWindowLongPtr32(hWnd, nIndex, newValue);
+    }
+
+    private bool IsCursorInsideWindow()
+    {
+        return _windowHandle != IntPtr.Zero
+            && GetCursorPos(out var cursor)
+            && GetWindowRect(_windowHandle, out var windowRect)
+            && cursor.X >= windowRect.Left
+            && cursor.X < windowRect.Right
+            && cursor.Y >= windowRect.Top
+            && cursor.Y < windowRect.Bottom;
+    }
+
+    private void SetWindowOpacity(double opacity)
+    {
+        if (Opacity != opacity)
+        {
+            Opacity = opacity;
+        }
+    }
+
+    /// <summary>
+    /// 设置编辑模式下应恢复的透明度。
+    /// </summary>
+    private void SetNormalOpacity(double opacity)
+    {
+        _normalOpacity = opacity;
+        if (!_isRevealed)
+        {
+            SetWindowOpacity(opacity);
+        }
+    }
+
+    /// <summary>
+    /// 保留 Ctrl+Q 原有功能：切换正常遮罩透明度。
+    /// </summary>
+    private void ToggleOpacity()
+    {
+        SetNormalOpacity(_normalOpacity == 1d ? WINDOW_MINIUMU_OPACITY : 1d);
     }
 
     /// <summary>
@@ -315,6 +575,15 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// 右键菜单
+    /// 学习模式
+    /// </summary>
+    private void MenuStudyMode_Click(object sender, RoutedEventArgs e)
+    {
+        SetStudyMode(menuStudyMode.IsChecked);
+    }
+
+    /// <summary>
     /// 眼睛按钮
     /// 鼠标移入
     /// </summary>
@@ -322,7 +591,10 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void GridEye_MouseEnter(object sender, MouseEventArgs e)
     {
-        Opacity = WINDOW_MINIUMU_OPACITY;
+        if (!_isStudyMode)
+        {
+            SetNormalOpacity(WINDOW_MINIUMU_OPACITY);
+        }
     }
 
     /// <summary>
@@ -333,7 +605,10 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void GridEye_MouseLeave(object sender, MouseEventArgs e)
     {
-        Opacity = 1;
+        if (!_isStudyMode)
+        {
+            SetNormalOpacity(1d);
+        }
     }
 
     /// <summary>
@@ -424,7 +699,7 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void CommandBinding_SwitchOpacity(object sender, CanExecuteRoutedEventArgs e)
     {
-        Opacity = Opacity == 1 ? WINDOW_MINIUMU_OPACITY : 1;
+        ToggleOpacity();
     }
 
     /// <summary>
