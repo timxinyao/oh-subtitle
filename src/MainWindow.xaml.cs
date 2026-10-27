@@ -118,9 +118,9 @@ public partial class MainWindow : Window
     private bool _isClickThrough;
 
     /// <summary>
-    /// 鼠标是否位于右侧常驻控制区；该区域用于在学习模式下保留退出入口。
+    /// 学习模式的拖动期间暂停揭示，避免窗口变为穿透状态。
     /// </summary>
-    private bool _isControlAreaHovered;
+    private bool _isDraggingInStudyMode;
 
     /// <summary>
     /// 编辑模式下应恢复的遮罩透明度
@@ -362,7 +362,7 @@ public partial class MainWindow : Window
         }
         else if (_isStudyMode && !_isExit)
         {
-            _isControlAreaHovered = IsCursorInsideControlArea();
+            UpdateStudyModeRevealState();
             _studyModeTimer.Start();
         }
     }
@@ -414,21 +414,48 @@ public partial class MainWindow : Window
     /// <param name="e"></param>
     private void Window_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_isStudyMode)
+        if (e.ChangedButton != MouseButton.Left || Mouse.LeftButton != MouseButtonState.Pressed)
         {
             return;
         }
 
-        if (e.ChangedButton == MouseButton.Left && Mouse.LeftButton == MouseButtonState.Pressed)
+        // 右侧控制区接收自己的点击，不应冒泡成窗口拖动。
+        if (e.OriginalSource is DependencyObject source
+            && (source == gridControls || gridControls.IsAncestorOf(source)))
         {
-            ResizeMode = ResizeMode.NoResize; // 防止窗口拖到屏幕边缘自动最大化
-            UpdateLayout();
-
-            DragMove(); // 拖动窗体
-
-            ResizeMode = ResizeMode.CanResizeWithGrip;
-            UpdateLayout();
+            return;
         }
+
+        if (_isStudyMode)
+        {
+            if (_isWindowMinimized || _isDraggingInStudyMode
+                || !TryGetCursorAndWindowRect(out var cursor, out var rect)
+                || IsCursorInsideControlArea(cursor, rect)
+                || StudyModeHitTest.Classify(rect.Left, rect.Top, rect.Right, rect.Bottom, cursor.X, cursor.Y) != StudyModeCursorArea.Drag)
+            {
+                return;
+            }
+
+            SetRevealState(false);
+            _isDraggingInStudyMode = true;
+            try
+            {
+                // CanMinimize 在整个学习模式中保持不变，以保留任务栏最小化。
+                DragMove();
+            }
+            finally
+            {
+                _isDraggingInStudyMode = false;
+                UpdateStudyModeRevealState();
+            }
+            return;
+        }
+
+        ResizeMode = ResizeMode.NoResize; // 防止窗口拖到屏幕边缘自动最大化
+        UpdateLayout();
+        DragMove(); // 拖动窗体
+        ResizeMode = ResizeMode.CanResizeWithGrip;
+        UpdateLayout();
     }
 
     /// <summary>
@@ -468,11 +495,25 @@ public partial class MainWindow : Window
     /// </summary>
     private void StudyModeTimer_Tick(object? sender, EventArgs e)
     {
-        if (_isStudyMode)
+        UpdateStudyModeRevealState();
+    }
+
+    private void UpdateStudyModeRevealState()
+    {
+        if (!_isStudyMode || _isDraggingInStudyMode || _isWindowMinimized)
         {
-            _isControlAreaHovered = IsCursorInsideControlArea();
-            SetRevealState(IsCursorInsideWindow() && !_isControlAreaHovered);
+            return;
         }
+
+        if (!TryGetCursorAndWindowRect(out var cursor, out var rect))
+        {
+            SetRevealState(false);
+            return;
+        }
+
+        bool revealed = StudyModeHitTest.Classify(rect.Left, rect.Top, rect.Right, rect.Bottom, cursor.X, cursor.Y)
+            == StudyModeCursorArea.Reveal && !IsCursorInsideControlArea(cursor, rect);
+        SetRevealState(revealed);
     }
 
     /// <summary>
@@ -480,7 +521,6 @@ public partial class MainWindow : Window
     /// </summary>
     private void GridControls_MouseEnter(object sender, MouseEventArgs e)
     {
-        _isControlAreaHovered = true;
         if (_isStudyMode)
         {
             SetRevealState(false);
@@ -488,11 +528,11 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 右侧常驻控制区离开：下一个轮询周期恢复正常揭示判断。
+    /// 右侧常驻控制区离开后立即根据鼠标位置更新揭示状态。
     /// </summary>
     private void GridControls_MouseLeave(object sender, MouseEventArgs e)
     {
-        _isControlAreaHovered = false;
+        UpdateStudyModeRevealState();
     }
 
     /// <summary>
@@ -511,7 +551,6 @@ public partial class MainWindow : Window
         _isStudyMode = enabled;
         menuStudyMode.IsChecked = enabled;
         gridStudyMode.ToolTip = enabled ? "关闭学习模式" : "开启学习模式";
-        _isControlAreaHovered = IsCursorInsideControlArea();
 
         // 学习模式只隐藏笔记区域，根布局和右侧操作区始终保留。
         _gridMainHiddenTimer.Stop();
@@ -519,7 +558,7 @@ public partial class MainWindow : Window
         // NoResize 会让无边框透明窗口失去任务栏图标的默认最小化行为；
         // CanMinimize 仍禁止调整大小，但保留任务栏最小化/恢复。
         ResizeMode = enabled ? ResizeMode.CanMinimize : ResizeMode.CanResizeWithGrip;
-        Cursor = enabled ? Cursors.None : Cursors.Arrow;
+        Cursor = Cursors.Arrow;
         gridControls.Cursor = Cursors.Arrow;
         gridEye.Cursor = Cursors.Hand;
         gridStudyMode.Cursor = Cursors.Hand;
@@ -527,8 +566,11 @@ public partial class MainWindow : Window
 
         if (enabled)
         {
-            _studyModeTimer.Start();
-            SetRevealState(IsCursorInsideWindow() && !_isControlAreaHovered);
+            if (!_isWindowMinimized)
+            {
+                UpdateStudyModeRevealState();
+                _studyModeTimer.Start();
+            }
         }
         else
         {
@@ -613,30 +655,21 @@ public partial class MainWindow : Window
             : SetWindowLongPtr32(hWnd, nIndex, newValue);
     }
 
-    private bool IsCursorInsideWindow()
+    private bool TryGetCursorAndWindowRect(out NativePoint cursor, out NativeRect windowRect)
     {
+        cursor = default;
+        windowRect = default;
         return _windowHandle != IntPtr.Zero
-            && GetCursorPos(out var cursor)
-            && GetWindowRect(_windowHandle, out var windowRect)
-            && cursor.X >= windowRect.Left
-            && cursor.X < windowRect.Right
-            && cursor.Y >= windowRect.Top
-            && cursor.Y < windowRect.Bottom;
+            && GetCursorPos(out cursor)
+            && GetWindowRect(_windowHandle, out windowRect);
     }
 
     /// <summary>
     /// 使用 Win32 屏幕像素坐标检测右侧常驻控制区。
     /// 控制区宽高来自 WPF 逻辑单位，并按当前 DPI 换算为屏幕像素。
     /// </summary>
-    private bool IsCursorInsideControlArea()
+    private bool IsCursorInsideControlArea(NativePoint cursor, NativeRect windowRect)
     {
-        if (_windowHandle == IntPtr.Zero
-            || !GetCursorPos(out var cursor)
-            || !GetWindowRect(_windowHandle, out var windowRect))
-        {
-            return false;
-        }
-
         var compositionTarget = PresentationSource.FromVisual(this)?.CompositionTarget;
         double scaleX = compositionTarget?.TransformToDevice.M11 ?? 1d;
         double scaleY = compositionTarget?.TransformToDevice.M22 ?? 1d;
@@ -756,6 +789,7 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
         {
+            e.Handled = true;
             ToggleStudyMode();
         }
     }
@@ -767,6 +801,7 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
         {
+            e.Handled = true;
             if (_isStudyMode)
             {
                 SetRevealState(false);
