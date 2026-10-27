@@ -2,6 +2,8 @@
 <img src="https://github.com/Surbowl/Oh-Subtitle/blob/master/images/icon.png?raw=true" width="50" />
 看剧学外语时没有合适的工具遮挡字幕？试试这款简洁的小程序，轻松遮盖字幕，还能记笔记 (＾Ｕ＾)ノ
 
+本项目 fork 自 [Surbowl/oh-subtitle](https://github.com/Surbowl/oh-subtitle)，遵循原项目的 [MIT 许可证](LICENSE)。
+
 ## Features
 - 可随意拖拽改变遮罩范围
 - 快捷记录笔记
